@@ -36,7 +36,7 @@ SETTINGS = dict(
     ranks=list(range(2, 100, 4)),        
                   # basis sizes of the global-basis ROM
     positivity_modes=(False,),                  # a signed state needs no non-negativity correction
-    hatrom_positivity=(),                       # no hAT-ROM sweep
+    hybrid_positivity=(),                       # no hybrid sweep
 
     # Evaluation
     n_eval={"test": 50, "train": 150},          # trajectories evaluated per set

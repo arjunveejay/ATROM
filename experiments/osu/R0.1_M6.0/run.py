@@ -34,7 +34,7 @@ SETTINGS = dict(
     etas=[1e-5, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10, 1e-11, 1e-12, 1e-14],   # energy a basis may discard
     ranks=list(range(1, 30, 2)),                # basis sizes of the global-basis ROM
     positivity_modes=(True,),                   # evaluate with the non-negativity correction
-    hatrom_positivity=(True,),                  # same for hAT-ROM
+    hybrid_positivity=(True,),                  # same for hybrid
 
     # Evaluation
     n_eval={"test": 2048, "train": 4096},       # trajectories evaluated per set

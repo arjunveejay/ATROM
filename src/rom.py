@@ -428,7 +428,7 @@ class ATROM:
 
         In order: if ``entering`` the cluster (and with ``positivity``), the start state is projected into the basis and the non-negativity correction is applied; one interval is integrated; with ``positivity`` the end state is corrected the same way. ``t_eval`` holds the sample times inside the interval, measured from its start. With ``carry`` the BDF integration starts from ``first_step``, the last step size of the previous interval.
 
-        Used by :meth:`solve_tracer` and by the hAT-ROM solve, so both solve an interval the same way. Returns ``t`` (from 0), ``y``, ``h`` (the last step size, with ``carry``), ``failure`` (``None`` or a message), and whether the start and end states were corrected.
+        Used by :meth:`solve_tracer` and by the hybrid solve, so both solve an interval the same way. Returns ``t`` (from 0), ``y``, ``h`` (the last step size, with ``carry``), ``failure`` (``None`` or a message), and whether the start and end states were corrected.
         """
         x0 = self.network.offset(pt_k)
         basis = self.roms[c].basis

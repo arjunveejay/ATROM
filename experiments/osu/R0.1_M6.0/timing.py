@@ -2,7 +2,7 @@
 
     python experiments/osu/R0.1_M6.0/timing.py
 
-Every testing trajectory is solved twice: with the AT-ROM at (TAU, ETA), using this experiment's settings, and with the FOM on every interval, as hAT-ROM solves its FOM windows (exact dense Jacobian). For each, the mean per trajectory of the right-hand-side calls, Jacobian evaluations, LU factorizations and wall time is reported, with the speedup and the largest relative L2 QoI error. The calls are counted by wrapping the right-hand-side and Jacobian functions and SciPy's BDF LU factorization.
+Every testing trajectory is solved twice: with the AT-ROM at (TAU, ETA), using this experiment's settings, and with the FOM on every interval, as hybrid solves its FOM windows (exact dense Jacobian). For each, the mean per trajectory of the right-hand-side calls, Jacobian evaluations, LU factorizations and wall time is reported, with the speedup and the largest relative L2 QoI error. The calls are counted by wrapping the right-hand-side and Jacobian functions and SciPy's BDF LU factorization.
 
 Needs the AT-ROM at (TAU, ETA) saved by a run of run.py. Writes timing_test.csv next to this file. One trajectory per worker process at a time, so run it on an otherwise idle node.
 """
@@ -18,8 +18,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(HERE, "..", "..", "..")))
 import numpy as np
 import scipy.integrate._ivp.bdf as bdf
 
-import src.hatrom as hatrom
-from src.hatrom import HATROM, HATROMConfig
+import src.hybrid as hybrid
+from src.hybrid import Hybrid, HybridConfig
 from src.rom import ROM
 from src.run import Experiment
 
@@ -45,9 +45,9 @@ def count_calls():
         return counted("rhs", rhs), counted("jac", jac)
 
     ROM.reduced_system = counted_reduced_system
-    rhs, jac = hatrom._quadratic_rhs, hatrom._quadratic_jacobian
-    hatrom._quadratic_rhs = lambda *a: counted("rhs", rhs(*a))
-    hatrom._quadratic_jacobian = lambda *a: counted("jac", jac(*a))
+    rhs, jac = hybrid._quadratic_rhs, hybrid._quadratic_jacobian
+    hybrid._quadratic_rhs = lambda *a: counted("rhs", rhs(*a))
+    hybrid._quadratic_jacobian = lambda *a: counted("jac", jac(*a))
     bdf.lu_factor = counted("lu", bdf.lu_factor)
 
 
@@ -78,7 +78,7 @@ def time_one(i):
         return t, y
 
     def fom_solve():
-        result = HATROM(atrom, cfg, HATROMConfig(positivity=False, force_fom=True)).solve(pt, x0, dt, t_eval=t_ref)
+        result = Hybrid(atrom, cfg, HybridConfig(positivity=False, force_fom=True)).solve(pt, x0, dt, t_eval=t_ref)
         return result.t, result.y
 
     return measure(atrom_solve, t_ref, y_ref), measure(fom_solve, t_ref, y_ref)

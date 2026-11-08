@@ -1,0 +1,16 @@
+tau_split,eta,positivity,n_tracers,n_completed,n_clusters,mean_rank,max_rank,n_splits,n_over_tol,n_unsplittable,worst_qoi_err_1_interval,stop_reason
+0.05,0.0001,on,200,200,492,3.268292682926829,118,484,0,243,0.04986017546499803,all clusters under tol
+0.005,0.0001,on,200,200,845,4.292307692307692,193,837,2,742,0.0202895183610561,clusters over tol but unsplittable (cannot form two children >= min_cluster_size=150)
+0.001,0.0001,on,200,200,818,6.2579462102689485,193,810,7,818,0.0202895183610561,clusters over tol but unsplittable (cannot form two children >= min_cluster_size=150)
+0.05,1e-05,on,200,200,375,3.8506666666666667,118,367,0,140,0.04990780387746576,all clusters under tol
+0.005,1e-05,on,200,200,825,4.305454545454546,193,817,3,725,0.0202895183610561,clusters over tol but unsplittable (cannot form two children >= min_cluster_size=150)
+0.001,1e-05,on,200,200,818,6.2420537897310515,193,810,6,818,0.0202895183610561,clusters over tol but unsplittable (cannot form two children >= min_cluster_size=150)
+0.05,1e-06,on,200,200,159,5.723270440251572,118,151,0,28,0.049233706387666415,all clusters under tol
+0.005,1e-06,on,200,200,669,4.834080717488789,193,661,2,401,0.0202895183610561,clusters over tol but unsplittable (cannot form two children >= min_cluster_size=150)
+0.001,1e-06,on,200,200,834,6.097122302158273,193,826,7,802,0.0202895183610561,clusters over tol but unsplittable (cannot form two children >= min_cluster_size=150)
+0.05,1e-07,on,200,200,80,8.7375,118,72,0,16,0.04911997423465419,all clusters under tol
+0.005,1e-07,on,200,199,464,5.745689655172414,193,456,2,122,0.0202895183610561,clusters over tol but unsplittable (cannot form two children >= min_cluster_size=150)
+0.001,1e-07,on,200,200,781,6.354673495518566,193,773,6,577,0.0202895183610561,clusters over tol but unsplittable (cannot form two children >= min_cluster_size=150)
+0.05,1e-08,on,200,200,46,13.41304347826087,118,38,0,10,0.04759363370436165,all clusters under tol
+0.005,1e-08,on,200,200,219,8.337899543378995,193,211,3,33,0.0202895183610561,clusters over tol but unsplittable (cannot form two children >= min_cluster_size=150)
+0.001,1e-08,on,200,200,596,7.052013422818792,193,588,7,264,0.0202895183610561,clusters over tol but unsplittable (cannot form two children >= min_cluster_size=150)

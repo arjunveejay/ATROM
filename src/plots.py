@@ -1,8 +1,8 @@
 """The figures of a run and the helpers its notebook uses, all drawn from results a run already wrote.
 
-``draw_figures``           what a run draws: the error panel over both sets, and the AT-ROM and hAT-ROM violins
+``draw_figures``           what a run draws: the error panel over both sets, and the AT-ROM and hybrid violins
 ``sweep_panel_splits``     the error panel, training set above testing set
-``sweep_partition_panel``  cluster counts, mean basis rank and hAT-ROM FOM use versus eta
+``sweep_partition_panel``  cluster counts, mean basis rank and hybrid FOM use versus eta
 ``violin_panel``           violin plots of the per-trajectory errors versus eta
 ``abundance_panel``, ``trajectory_panel``, ``qoi_panels_pair``   one-trajectory figures used by the notebooks
 
@@ -30,7 +30,7 @@ from matplotlib.patches import Patch, Rectangle
 from matplotlib.ticker import FuncFormatter, MaxNLocator, SymmetricalLogLocator
 
 from .fom.astrochemistry import NSEC
-from .hatrom import FOM_INTERVAL
+from .hybrid import FOM_INTERVAL
 from .run import Results
 
 
@@ -47,7 +47,7 @@ TOL_PAIRS = [("#7fc4f2", "#1f77b4"),        # blue
              ("#f2b9c4", "#c2185b"),        # pink
              ("#bdbdbd", "#525252")]
 
-HATROM_MARKER = "*"      # hAT-ROM points on the AT-ROM error panel, in the colour of their tau_split
+HYBRID_MARKER = "*"      # Hybrid points on the AT-ROM error panel, in the colour of their tau_split
 
 ETA_MIN = 1e-16
 
@@ -92,10 +92,10 @@ TRAJ_STYLE = {"reference": ("-", 2.2), "clustered": ("--", 1.8),
 
 # Per-system settings: a signed state has no non-negativity correction, and astrochemistry times are in kyr.
 CASE_FIGURES = {
-    "nelson": dict(positivity_label="on", time_scale=NSEC * 1e3, time_label="Time [kyr]", hatrom_positivity=True),
-    "osu": dict(positivity_label="on", time_scale=NSEC * 1e3, time_label="Time [kyr]", hatrom_positivity=True),
-    "lorenz96": dict(positivity_label="off", time_scale=1.0, time_label="Time", hatrom_positivity=False),
-    "egfr": dict(positivity_label="on", time_scale=1.0, time_label="Time [s]", hatrom_positivity=False),
+    "nelson": dict(positivity_label="on", time_scale=NSEC * 1e3, time_label="Time [kyr]", hybrid_positivity=True),
+    "osu": dict(positivity_label="on", time_scale=NSEC * 1e3, time_label="Time [kyr]", hybrid_positivity=True),
+    "lorenz96": dict(positivity_label="off", time_scale=1.0, time_label="Time", hybrid_positivity=False),
+    "egfr": dict(positivity_label="on", time_scale=1.0, time_label="Time [s]", hybrid_positivity=False),
 }
 
 
@@ -106,46 +106,47 @@ CASE_FIGURES = {
 def draw_figures(case, out_dir, qoi_names, taus, etas):
     """Draw a finished run's figures into ``<out_dir>/figures`` and return that folder.
 
-    The error panel (``panel_errors.pdf``, only when both sets were run), the cluster counts and mean basis rank versus eta (``panel_partition.pdf``), and the testing-set violins, ``violin_atrom.pdf`` and, when hAT-ROM was run, ``violin_hatrom.pdf``.
+    The error panel (``panel_errors.pdf``, only when both sets were run), the cluster counts and mean basis rank versus eta (``panel_partition.pdf``), and the testing-set violins, ``violin_atrom.pdf`` and, when hybrid was run, ``violin_hybrid.pdf``.
     """
     shown = CASE_FIGURES[case]["positivity_label"]   # one setting only, so runs with and without the correction are not averaged
     fig_dir, sweep_dir = os.path.join(out_dir, "figures"), os.path.join(out_dir, "sweep")
     os.makedirs(fig_dir, exist_ok=True)
     taus, etas = sorted(taus), sorted(etas, reverse=True)
-    has = lambda prefix, split: os.path.exists(os.path.join(out_dir, f"{prefix}fits{Results.suffix(split)}.csv"))
+    has = lambda prefix, split: (bool(glob.glob(os.path.join(sweep_dir, f"hybrid_errors_*{Results.suffix(split)}.csv"))) if prefix
+                                 else os.path.exists(os.path.join(out_dir, f"fits{Results.suffix(split)}.csv")))
 
     splits = [s for s in ("train", "test") if has("", s) and os.path.exists(os.path.join(out_dir, f"global_fits{Results.suffix(s)}.csv"))]
     sweep = {s: load_fits(out_dir, shown, s) for s in splits}
     rank = {s: load_global_fits(out_dir, s) for s in splits}
-    hatrom = {s: load_fits(out_dir, shown, s, prefix="hatrom_") if has("hatrom_", s) else None for s in splits}
+    hybrid = {s: load_fits(out_dir, shown, s, prefix="hybrid_") for s in splits}
     n_eval = {s: int(np.max(sweep[s]["n_tracers"])) for s in splits}
     if len(splits) == 2:
         sweep_panel_splits(sweep["train"], rank["train"], sweep["test"], rank["test"], qoi_names,
                            n_eval_train=n_eval["train"], n_eval_test=n_eval["test"], show_tols=tuple(taus),
-                           twin_tol=min(taus), hatrom_train=hatrom["train"], hatrom_test=hatrom["test"],
+                           twin_tol=min(taus), hybrid_train=hybrid["train"], hybrid_test=hybrid["test"],
                            savepath=os.path.join(fig_dir, "panel_errors.pdf"))
     else:
         print("  the error panel needs both the training and testing results; skipped", flush=True)
 
     if "test" in sweep:
-        # Cluster counts, mean basis rank and, where hAT-ROM was run, its FOM share, all versus eta.
+        # Cluster counts, mean basis rank and, where hybrid was run, its FOM share, all versus eta.
         fig, _ = sweep_partition_panel(sweep["test"], sweep_dir, show_tols=tuple(taus), positivity=shown, eval_split="test",
-                                       max_eta_exp=int(round(-np.log10(min(etas)))), fom=has("hatrom_", "test"))
+                                       max_eta_exp=int(round(-np.log10(min(etas)))), fom=has("hybrid_", "test"))
         fig.savefig(os.path.join(fig_dir, "panel_partition.pdf"), dpi=200, bbox_inches="tight")
 
     violins = dict(etas=etas, positivity=shown, eval_split="test", figsize=(5 * len(taus) + 2, 5 * len(qoi_names)))
     if has("", "test"):
         violin_panel(sweep_dir, taus[::-1], qoi_names, savepath=os.path.join(fig_dir, "violin_atrom.pdf"), **violins)
-    if has("hatrom_", "test"):
-        violin_panel(sweep_dir, taus[::-1], qoi_names, prefix="hatrom_",
-                     savepath=os.path.join(fig_dir, "violin_hatrom.pdf"), **violins)
+    if has("hybrid_", "test"):
+        violin_panel(sweep_dir, taus[::-1], qoi_names, prefix="hybrid_",
+                     savepath=os.path.join(fig_dir, "violin_hybrid.pdf"), **violins)
     plt.close("all")
     return fig_dir
 
 
 def sweep_panel_splits(df_train, sc_train, df_test, sc_test, qoi, n_eval_train, n_eval_test,
                        show_tols=(0.01, 0.1, 0.4), twin_tol=0.1, ylim=(5e-05, 0.4), figsize=(15, 10),
-                       savepath=None, hatrom_train=None, hatrom_test=None, row_gap=0.0, legend_ncol=None,
+                       savepath=None, hybrid_train=None, hybrid_test=None, row_gap=0.0, legend_ncol=None,
                        legend_y=0.93, sharex=True):
     """Mean relative L2 error versus eta: global-basis ROM (left) and AT-ROM (right), training row above testing row.
 
@@ -164,8 +165,8 @@ def sweep_panel_splits(df_train, sc_train, df_test, sc_test, qoi, n_eval_train, 
 
     fig, axes = plt.subplots(2, 2, figsize=figsize)
     any_fail = False
-    for row, split, sc_d, d, n_ev, hyb in ((axes[0], "train", sc_train, df_train, n_eval_train, hatrom_train),
-                                           (axes[1], "test", sc_test, df_test, n_eval_test, hatrom_test)):
+    for row, split, sc_d, d, n_ev, hyb in ((axes[0], "train", sc_train, df_train, n_eval_train, hybrid_train),
+                                           (axes[1], "test", sc_test, df_test, n_eval_test, hybrid_test)):
         cap = SPLIT_CAPTION[split]
         any_fail |= _panel_global(row[0], sc_d, qoi, n_ev, split, cap)
         _panel_atrom(row[1], d, tols, dark, qoi, n_ev, twin_tol, ylim, hyb, cap)
@@ -195,8 +196,8 @@ def sweep_panel_splits(df_train, sc_train, df_test, sc_test, qoi, n_eval_train, 
 
     handles = [Line2D([], [], color=GLOBAL_COLOR, marker="o", ls="-", lw=2, label="Global basis ROM")]
     handles += [Line2D([], [], color=dark[t], marker="o", ls="-", lw=2, label=_tau_label(t)) for t in tols]
-    if any(h is not None and len(h) for h in (hatrom_train, hatrom_test)):
-        handles.append(Line2D([], [], marker=HATROM_MARKER, ls="none", label="hAT-ROM",
+    if any(h is not None and len(h) for h in (hybrid_train, hybrid_test)):
+        handles.append(Line2D([], [], marker=HYBRID_MARKER, ls="none", label="Hybrid",
                               color=dark.get(twin_tol, TOL_PAIRS[0][1]), ms=20))
     if any_fail:
         handles.append(Line2D([], [], color=FAIL_COLOR, ls="none", marker=r"$\%$", ms=12, label="Failures"))
@@ -210,9 +211,9 @@ def sweep_panel_splits(df_train, sc_train, df_test, sc_test, qoi, n_eval_train, 
 
 def sweep_partition_panel(df, sweep_dir, show_tols=(0.01, 0.1, 0.4), positivity='on', eval_split='test',
                           max_eta_exp=8, bar_headroom=1.9, figsize=(22, 6), fom=True):
-    """One row versus eta: AT-ROM cluster counts, AT-ROM mean basis rank and the hAT-ROM's share of FOM intervals.
+    """One row versus eta: AT-ROM cluster counts, AT-ROM mean basis rank and the hybrid's share of FOM intervals.
 
-    The first two describe the fit, so ``df`` may be either set's table. The FOM share is read from the ``hatrom_errors`` files in ``sweep_dir``; ``fom=False`` leaves it out.
+    The first two describe the fit, so ``df`` may be either set's table. The FOM share is read from the ``hybrid_errors`` files in ``sweep_dir``; ``fom=False`` leaves it out.
     """
     use_paper_style()
     tols = [t for t in sorted(np.unique(df["tau_split"])) if t in set(show_tols)]
@@ -250,7 +251,7 @@ def violin_panel(sweep_dir, taus, qoi, etas=None, positivity="on",
                  rank_label="Mean basis size", rank_labelpad=12, prefix="", labels=None):
     """Violins of the log10 per-trajectory error versus eta: one row per QoI, one column per tau_split.
 
-    Read from the sweep's ``<prefix>errors_*.csv`` files (``prefix="hatrom_"`` for hAT-ROM). White dot: median; thick bar: 25th to 75th percentile; thin line: up to 1.5 times that range. Red text: percentage of trajectories that failed.
+    Read from the sweep's ``<prefix>errors_*.csv`` files (``prefix="hybrid_"`` for hybrid). White dot: median; thick bar: 25th to 75th percentile; thin line: up to 1.5 times that range. Red text: percentage of trajectories that failed.
     ``rank_df`` (a table with ``mean_rank``) adds a top axis with the mean basis rank. ``labels`` renames QoIs on the row labels. Every ``stride``-th eta is labelled.
     """
     taus = list(taus)
@@ -384,26 +385,29 @@ def violin_panel(sweep_dir, taus, qoi, etas=None, positivity="on",
 # ---------------------------------------------------------------------------
 
 def load_tables(out_dir, positivity):
-    """The AT-ROM, global-basis ROM and hAT-ROM tables of both sets, with mean errors added; a set without hAT-ROM maps to None."""
+    """The AT-ROM, global-basis ROM and hybrid tables of both sets, with mean errors added; a set without hybrid maps to None."""
     splits = ("train", "test")
     sweep = {s: load_fits(out_dir, positivity, s) for s in splits}
     rank = {s: load_global_fits(out_dir, s) for s in splits}
-    hatrom = {s: (load_fits(out_dir, positivity, s, prefix="hatrom_")
-                  if os.path.exists(os.path.join(out_dir, f"hatrom_fits{Results.suffix(s)}.csv")) else None)
-              for s in splits}
-    return sweep, rank, hatrom
+    hybrid = {s: load_fits(out_dir, positivity, s, prefix="hybrid_") for s in splits}
+    return sweep, rank, hybrid
 
 
 def load_fits(out_dir, positivity="on", eval_split="test", prefix=""):
-    """The rows of ``<prefix>fits<split>.csv`` at one positivity setting, with the mean error over completed trajectories added.
+    """The rows of ``fits<split>.csv`` at one positivity setting, with the mean error over completed trajectories added.
 
-    ``prefix`` is ``"hatrom_"`` for hAT-ROM.
+    With ``prefix="hybrid_"``, the mean errors are hybrid's, for the pairs hybrid was run on; None if it was not run.
     """
-    path = os.path.join(out_dir, f"{prefix}fits{Results.suffix(eval_split)}.csv")
+    path = os.path.join(out_dir, f"fits{Results.suffix(eval_split)}.csv")
     fits = Results.where(Results.read(path), positivity=positivity)
     if not fits.size:
         raise ValueError(f"{path} has no rows with positivity {positivity}")
     sweep_dir = os.path.join(out_dir, "sweep")
+    if prefix:
+        fits = fits[[os.path.exists(errors_path(sweep_dir, tau, eta, eval_split, prefix))
+                     for tau, eta in zip(fits["tau_split"], fits["eta"])]]
+        if not fits.size:
+            return None
     rows = []
     for tau, eta in zip(fits["tau_split"], fits["eta"]):
         errors = Results.read(errors_path(sweep_dir, tau, eta, eval_split, prefix))
@@ -515,7 +519,7 @@ def thin_tick_labels(fig, column, keep):
 
 def set_partition_titles(fig, axes):
     """Title the panels of :func:`sweep_partition_panel` and move its legend above the titles."""
-    for ax, title in zip(axes, ("AT-ROM clusters", "AT-ROM basis rank", "hAT-ROM FOM use")):
+    for ax, title in zip(axes, ("AT-ROM clusters", "AT-ROM basis rank", "Hybrid FOM use")):
         ax.set_title(title, fontsize=24)
     fig.legends[0].set_bbox_to_anchor((0.5, 0.95), transform=fig.transFigure)
 
@@ -706,15 +710,15 @@ def trajectory_panel(t, series, route, qoi, figsize=(13, 7.5)):
     return fig, axes
 
 
-def qoi_panels_pair(hatrom_args, nonnegativity_args):
-    """:func:`hatrom_qoi_panel` (left) and :func:`nonnegativity_qoi_panel` (right) side by side, with one QoI legend on top.
+def qoi_panels_pair(hybrid_args, nonnegativity_args):
+    """:func:`hybrid_qoi_panel` (left) and :func:`nonnegativity_qoi_panel` (right) side by side, with one QoI legend on top.
 
     Each argument is a dict of that function's arguments. Returns ``(fig, axes)``: row 0 the data panels, row 1 the route strips.
     """
     use_paper_style()
     fig, axes = plt.subplots(2, 2, figsize=(26, 8.5), squeeze=False, sharey="row",
                              gridspec_kw=dict(height_ratios=[1.0, 0.09], hspace=0.45, wspace=0.05))
-    hatrom_qoi_panel(**hatrom_args, axes=(axes[0][0], axes[1][0]), fontsize=24)
+    hybrid_qoi_panel(**hybrid_args, axes=(axes[0][0], axes[1][0]), fontsize=24)
     nonnegativity_qoi_panel(**nonnegativity_args, axes=(axes[0][1], axes[1][1]), qoi_legend=False, fontsize=24)
     axes[0][1].set_ylabel("")
     axes[0][1].tick_params(axis="y", labelleft=False)
@@ -737,13 +741,13 @@ def qoi_panels_pair(hatrom_args, nonnegativity_args):
     return fig, axes
 
 
-def hatrom_qoi_panel(result, rom, t_ref, y_ref, *, qoi_indices, species, title=None, labels=None,
+def hybrid_qoi_panel(result, rom, t_ref, y_ref, *, qoi_indices, species, title=None, labels=None,
                      n_markers=40, t_min=None, ylim=None, time_label="Time [s]", time_scale=1.0,
                      time_unit="s", figsize=(13, 6.5), fontsize=16, xscale="log", axes=None,
                      qoi_legend=True, normalize=True, savepath=None):
-    """The QoIs of one trajectory: hAT-ROM (lines) against the FOM (circles), with the AT-ROM's cluster route in a strip below.
+    """The QoIs of one trajectory: hybrid (lines) against the FOM (circles), with the AT-ROM's cluster route in a strip below.
 
-    The bands are the hAT-ROM's cluster route, white boxes its FOM windows and red triangles its triggers. The strip ends where the AT-ROM fails.
+    The bands are the hybrid's cluster route, white boxes its FOM windows and red triangles its triggers. The strip ends where the AT-ROM fails.
     Shared options are described in :func:`_qoi_start` and :func:`_qoi_finish`. Returns ``(fig, (ax, strip_ax))``.
     """
     dt = result.dt_hydro / time_scale
@@ -768,10 +772,10 @@ def hatrom_qoi_panel(result, rom, t_ref, y_ref, *, qoi_indices, species, title=N
     if t_fail < t_end - 0.5 * dt:
         _mark_failure(strip_ax, [strip_ax], t_fail, t_min, t_end, f"AT-ROM fails at t = {t_fail:.3g} {time_unit}", fontsize)
 
-    route_key = Patch(label="hAT-ROM cluster route")
-    keys = [Line2D([], [], color="0.35", lw=1.8, label="hAT-ROM"),
+    route_key = Patch(label="Hybrid cluster route")
+    keys = [Line2D([], [], color="0.35", lw=1.8, label="Hybrid"),
             route_key,
-            Line2D([], [], color=FAIL_COLOR, marker="v", ms=9, ls="none", label="hAT-ROM trigger"),
+            Line2D([], [], color=FAIL_COLOR, marker="v", ms=9, ls="none", label="Hybrid trigger"),
             Patch(facecolor="w", edgecolor="0.35", lw=1.5, label="FOM window")]
     return _qoi_finish(fig, ax, strip_ax, handles, keys, route_key, _route_swatch(result.path, cmap, BAND_ALPHA),
                        "AT-ROM route", y_ref[qi], normalize, ylim, fontsize, time_unit, time_label, title,
@@ -1126,8 +1130,8 @@ def _panel_global(ax, sc_df, qoi, n_eval, split, corner_label):
     return any_fail
 
 
-def _panel_atrom(ax, df, tols, dark, qoi, n_eval, twin_tol, ylim, hatrom_df, corner_label):
-    """AT-ROM mean error versus eta, one curve per tau_split, with hAT-ROM stars and the mean basis rank of ``twin_tol`` on the top axis."""
+def _panel_atrom(ax, df, tols, dark, qoi, n_eval, twin_tol, ylim, hybrid_df, corner_label):
+    """AT-ROM mean error versus eta, one curve per tau_split, with hybrid stars and the mean basis rank of ``twin_tol`` on the top axis."""
     series, fails = [], []
     for t in tols:
         x, y = mean_series(df, t, qoi)
@@ -1162,14 +1166,14 @@ def _panel_atrom(ax, df, tols, dark, qoi, n_eval, twin_tol, ylim, hatrom_df, cor
                 others.append([lut.get(round(float(np.log10(xj)), 6), np.nan) for xj in np.asarray(x)])
         _annotate_failures(ax, x, y, fail, n_eval, dark[t], pads, others)
 
-    # hAT-ROM stars; the smallest tau_split on top.
-    if hatrom_df is not None and len(hatrom_df):
+    # Hybrid stars; the smallest tau_split on top.
+    if hybrid_df is not None and len(hybrid_df):
         for k, t in enumerate(tols):
-            if not (hatrom_df["tau_split"] == t).any():
+            if not (hybrid_df["tau_split"] == t).any():
                 continue
-            hx, hy = mean_series(hatrom_df, t, qoi)
+            hx, hy = mean_series(hybrid_df, t, qoi)
             if np.size(hx):
-                ax.plot(hx, hy, ls="none", marker=HATROM_MARKER, ms=18, mfc=dark[t], mec="white", mew=1.2,
+                ax.plot(hx, hy, ls="none", marker=HYBRID_MARKER, ms=18, mfc=dark[t], mec="white", mew=1.2,
                         zorder=5 + (len(tols) - k) / (len(tols) + 1))
 
     ticks, rank = rank_series(df, twin_tol)
@@ -1222,11 +1226,11 @@ def _panel_rank(ax, df, tols, dark, etas):
 
 
 def _panel_fom_fraction(ax, sweep_dir, taus, dark, etas, positivity="on", eval_split="test"):
-    """hAT-ROM percentage of FOM intervals versus eta, one curve per tau_split, averaged over completed trajectories."""
+    """Hybrid percentage of FOM intervals versus eta, one curve per tau_split, averaged over completed trajectories."""
     for tau in taus:
         x, y = [], []
         for eta in sorted(etas, reverse=True):
-            path = errors_path(sweep_dir, tau, eta, eval_split, prefix="hatrom_")
+            path = errors_path(sweep_dir, tau, eta, eval_split, prefix="hybrid_")
             if not os.path.exists(path):
                 continue
             rows = Results.where(Results.read(path), positivity=positivity)

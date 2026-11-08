@@ -3,7 +3,7 @@
 Each model is run over every set (testing, then training trajectories) before the next:
 
     1. AT-ROM:           at every (tau_split, eta) pair; fitted on the first set's pass, reused after
-    2. hAT-ROM:          AT-ROM with backtracking to the FOM, using the AT-ROMs from step 1
+    2. Hybrid:          AT-ROM with backtracking to the FOM, using the AT-ROMs from step 1
     3. global-basis ROM: one basis for all data, at each basis rank in ``ranks``
     4. figures for each set
 
@@ -30,7 +30,7 @@ from scipy.interpolate import interp1d
 from . import REPO_ROOT
 from .cluster import Cluster
 from .fom.data import load_trajectories, open_snapshots
-from .hatrom import AGGREGATES, HATROM, HATROMConfig
+from .hybrid import AGGREGATES, Hybrid, HybridConfig
 from .rom import ATROM
 
 
@@ -55,9 +55,9 @@ def main(experiment_file):
     # Each model over every set before the next model. The AT-ROMs are fitted on the first set's pass and reused after.
     for exp in exps:
         exp.atrom_sweep()
-    if s.get("hatrom_positivity"):
+    if s.get("hybrid_positivity"):
         for exp in exps:
-            exp.hatrom_sweep()
+            exp.hybrid_sweep()
     for exp in exps:
         exp.global_rom_sweep()
     if not args.no_figures:
@@ -77,7 +77,7 @@ class Settings(SimpleNamespace):
 
     #: Entries of an experiment's settings that steer the run rather than the model.
     RUN_KEYS = {"build_snapshots", "taus", "etas", "ranks", "n_eval", "splits", "generate", "positivity_modes",
-                "hatrom_positivity", "figure_qoi"}
+                "hybrid_positivity", "figure_qoi"}
 
     def __init__(self, **values):
         super().__init__(**values)
@@ -299,7 +299,7 @@ class Experiment:
     def error_rows(self, ev, positivity, extra=None):
         """One row per attempted trajectory: position, global id, ``positivity``, whether it completed, and its error per (measure, QoI); nan if it did not complete.
 
-        ``extra`` maps column names to values over all attempted trajectories, such as the hAT-ROM diagnostics.
+        ``extra`` maps column names to values over all attempted trajectories, such as the hybrid diagnostics.
         """
         completed = {int(p): k for k, p in enumerate(ev["valid_idx"])}
         rows = []
@@ -324,10 +324,10 @@ class Experiment:
     # --- the run ------------------------------------------------------------
 
     def run(self, figures=True):
-        """All three sweeps on this set, then its figures: AT-ROM, hAT-ROM, global-basis ROM."""
+        """All three sweeps on this set, then its figures: AT-ROM, hybrid, global-basis ROM."""
         self.atrom_sweep()
-        if self.s.get("hatrom_positivity"):
-            self.hatrom_sweep()
+        if self.s.get("hybrid_positivity"):
+            self.hybrid_sweep()
         self.global_rom_sweep()
         if figures:
             self.figures()
@@ -388,35 +388,34 @@ class Experiment:
                           f"{atrom.cluster.n_clusters} clusters", flush=True)
                 results.add(label, summary, errors)
 
-    def hatrom_sweep(self):
-        """hAT-ROM at every (tau_split, eta), using the AT-ROMs saved by :meth:`atrom_sweep`; nothing is refitted.
+    def hybrid_sweep(self):
+        """Hybrid at every (tau_split, eta), using the AT-ROMs saved by :meth:`atrom_sweep`; nothing is refitted.
 
-        Writes ``sweep/hatrom_errors_<tau_eta>_<split>.csv`` per pair and the summary ``hatrom_fits_<split>.csv``.
+        Writes ``sweep/hybrid_errors_<tau_eta>_<split>.csv`` per pair; a pair whose file exists is skipped.
         """
-        results = self._pair_results("hatrom_fits", "hatrom_errors")
         for eta in self.s["etas"]:
             for tau in self.s["taus"]:
                 label = Results.label(tau, eta)
-                if results.done(label):
+                path = os.path.join(self.sweep_dir, f"hybrid_errors_{label}{self.tag}.csv")
+                if os.path.exists(path) and not self.overwrite:
                     continue
                 ref, ctx = self.ref, self.ctx
                 atrom = self.load_atrom(tau, eta)
-                summary, errors = [], []
-                for positivity in self.s["hatrom_positivity"]:
+                errors = []
+                for positivity in self.s["hybrid_positivity"]:
                     cfg = self.cfg.replace(eta=eta, positivity=positivity)
-                    ev = HATROM(atrom, cfg, HATROMConfig(positivity=positivity)).evaluate(
+                    ev = Hybrid(atrom, cfg, HybridConfig(positivity=positivity)).evaluate(
                         ref.tracers, ref.x0s, ref.t, ref.y, ctx.qoi_indices, self.qoi_names, ctx.dt_hydro,
                         n_workers=cfg.n_workers, verbose=False)
-                    errors += self.error_rows(ev, positivity, extra=ev["hatrom"])
-                    summary.append(self.summary_row(tau, eta, positivity, ev, atrom))
-                    fom = ev["hatrom"]["fom_frac"]
+                    errors += self.error_rows(ev, positivity, extra=ev["hybrid"])
+                    fom = ev["hybrid"]["fom_frac"]
                     fom = float(np.nanmean(fom)) if np.isfinite(fom).any() else float("nan")
-                    print(f"[hAT-ROM] {label} positivity {_on_off(positivity)}: {ev['n_valid']}/{ev['n_tracers']} completed, "
+                    print(f"[hybrid] {label} positivity {_on_off(positivity)}: {ev['n_valid']}/{ev['n_tracers']} completed, "
                           f"full model used {fom:.1%} of the time", flush=True)
-                results.add(label, summary, errors)
+                Results._write(path, errors)
 
     def figures(self):
-        """The run's figures, in ``figures/``: the error panel over both sets, and the AT-ROM and hAT-ROM violins."""
+        """The run's figures, in ``figures/``: the error panel over both sets, and the AT-ROM and hybrid violins."""
         from .plots import draw_figures
         fig_dir = draw_figures(self.case, self.out_dir, self.s.get("figure_qoi") or self.qoi_names, self.s["taus"], self.s["etas"])
         print(f"[{self.case}] figures -> {fig_dir}", flush=True)

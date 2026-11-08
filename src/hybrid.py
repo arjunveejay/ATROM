@@ -1,8 +1,8 @@
-"""hAT-ROM: AT-ROM inference on one trajectory, with backtracking to the FOM.
+"""Hybrid: AT-ROM inference on one trajectory, with backtracking to the FOM.
 
 AT-ROM is solved interval by interval. When the cluster changes on T_k (or k = 0), the relative projection error of the normalized initial state in the new basis is computed. If it exceeds ``sqrt(eta)``, backtracking is triggered. For k >= 1 the solve returns to the interval T_l at which the cluster active on T_{k-1} was first assigned, discards the AT-ROM solution over T_l..T_{k-1}, recomputes it with the FOM in one FOM window, and resumes AT-ROM on T_k without a further check. For k = 0, T_0 is solved with the FOM.
 
-    result = HATROM(atrom, cfg, HATROMConfig()).solve(context.test_tracers[i], x0s[i], context.dt_hydro, t_eval=t_refs[i])
+    result = Hybrid(atrom, cfg, HybridConfig()).solve(context.test_tracers[i], x0s[i], context.dt_hydro, t_eval=t_refs[i])
 
 Times are in the solver's own units throughout, matching ``context.dt_hydro``.
 
@@ -38,23 +38,23 @@ _FLOOR = 1e-30
 # Worker processes (top-level functions, so they can be sent to worker processes)
 # ---------------------------------------------------------------------------
 
-_hatrom_state = None
+_hybrid_state = None
 
 
-def _hatrom_init(hatrom):
-    global _hatrom_state
-    _hatrom_state = hatrom
+def _hybrid_init(hybrid):
+    global _hybrid_state
+    _hybrid_state = hybrid
 
 
-def _hatrom_solve_one(args):
+def _hybrid_solve_one(args):
     """Solve and score one trajectory in a worker.
 
     Returns only the error vectors and scalars; the solution itself is not needed by the caller.
     """
     i, pt, x0, t_fom, y_fom, dt_hydro = args
-    hatrom = _hatrom_state
+    hybrid = _hybrid_state
     try:
-        result = hatrom.solve(pt, x0, dt_hydro, t_eval=t_fom)
+        result = hybrid.solve(pt, x0, dt_hydro, t_eval=t_fom)
         n_steps = np.asarray(pt).shape[0] - 1
         valid = result.failure is None and result.t.size > 0 and np.isclose(result.t[-1], n_steps * dt_hydro)
         errors = _error_series(result.t, result.y, t_fom, y_fom) if valid else None
@@ -67,15 +67,15 @@ def _hatrom_solve_one(args):
 # Main classes
 # ---------------------------------------------------------------------------
 
-class HATROM:
-    """hAT-ROM: AT-ROM with backtracking to the FOM where the new cluster's basis represents the state poorly.
+class Hybrid:
+    """Hybrid: AT-ROM with backtracking to the FOM where the new cluster's basis represents the state poorly.
 
-    Holds the AT-ROM (``atrom``) and the FOM (``fom``). ``cfg`` is the run's settings (its ``eta`` sets the trigger threshold) and ``config`` the :class:`HATROMConfig`.
+    Holds the AT-ROM (``atrom``) and the FOM (``fom``). ``cfg`` is the run's settings (its ``eta`` sets the trigger threshold) and ``config`` the :class:`HybridConfig`.
     """
 
     def __init__(self, atrom, cfg, config=None):
         self.atrom, self.cfg = atrom, cfg
-        self.config = c = HATROMConfig() if config is None else config
+        self.config = c = HybridConfig() if config is None else config
         self.fom = FOM(atrom.network, cfg.ode_method, atol=c.fom_atol, rtol=c.fom_rtol,
                              min_scale=c.fom_min_scale, carry_step=c.fom_carry_step)
 
@@ -84,9 +84,9 @@ class HATROM:
 
         ``pt`` has one row per interval boundary t_k, so ``n_steps + 1`` rows. ``t_eval`` is the whole trajectory's time array, normally the FOM reference's own times, which is what keeps the output columns aligned with it.
 
-        A solver failure is recorded in :attr:`HATROMResult.failure` and the solution so far is returned, following ``solve_tracer``'s ``info`` convention rather than raising out of a sweep.
+        A solver failure is recorded in :attr:`HybridResult.failure` and the solution so far is returned, following ``solve_tracer``'s ``info`` convention rather than raising out of a sweep.
         """
-        atrom, cfg, hatrom = self.atrom, self.cfg, self.config
+        atrom, cfg, hybrid = self.atrom, self.cfg, self.config
         self.fom.check_supported()
         pt = np.asarray(pt, dtype=np.float64)
         x0 = np.asarray(x0, dtype=np.float64)
@@ -134,7 +134,7 @@ class HATROM:
             r = (atrom.roms[cid].basis.projection_error(x)
                  if (entering and not after_fom) else np.nan)
 
-            if hatrom.force_fom:
+            if hybrid.force_fom:
                 failure = full_model(k, k)
                 if failure is not None:
                     break
@@ -163,7 +163,7 @@ class HATROM:
             t0 = time.perf_counter()
             step = atrom.solve_interval(pt[k], x, cid, dt, cfg.atol, cfg.rtol,
                                         window_samples(t_eval, k * dt, (k + 1) * dt),
-                                        entering=entering, positivity=hatrom.positivity,
+                                        entering=entering, positivity=hybrid.positivity,
                                         method=cfg.ode_method, carry=carry, first_step=h)
             rom_seconds += time.perf_counter() - t0
             if step.failure is not None:
@@ -175,7 +175,7 @@ class HATROM:
             k += 1
 
         t_out, y_out = iv.concatenate()
-        return HATROMResult(
+        return HybridResult(
             t=t_out, y=y_out,
             path=np.asarray(iv.path, dtype=int),
             fom_step=np.asarray(iv.fom, dtype=bool),
@@ -184,14 +184,14 @@ class HATROM:
             trigger_proj_error=np.asarray(trigger_proj_error, dtype=float),
             n_pos_entry=int(sum(iv.pos_entry)),
             n_pos_endpoint=int(sum(iv.pos_endpoint)),
-            n_steps=n_steps, dt_hydro=dt, config=hatrom, failure=failure,
+            n_steps=n_steps, dt_hydro=dt, config=hybrid, failure=failure,
             n_fom_solves=n_fom_solves, n_rom_solves=n_rom_solves, n_rom_attempted=n_rom_attempted,
             fom_seconds=fom_seconds, rom_seconds=rom_seconds)
 
     def solve_pure(self, pt, x0, dt_hydro, t_eval=None, positivity=True):
         """AT-ROM without backtracking on the same trajectory, as a :class:`RomResult`.
 
-        Wraps :meth:`ATROM.solve_tracer` so hAT-ROM and AT-ROM score through the same code.
+        Wraps :meth:`ATROM.solve_tracer` so hybrid and AT-ROM score through the same code.
         """
         atrom, cfg = self.atrom, self.cfg
         pt = np.asarray(pt, dtype=np.float64)
@@ -207,7 +207,7 @@ class HATROM:
     def evaluate(self, tracers, x_eqs, t_foms, y_foms, qoi_indices, qoi_names, dt_hydro, n_workers=1, verbose=True):
         """Solve and score every trajectory: the counts, ``valid_idx`` and the per-trajectory errors of the completed trajectories, as in ``run.Experiment.score``.
 
-        Adds a ``hatrom`` block of per-trajectory diagnostics with no AT-ROM counterpart, over every attempted trajectory rather than only the completed ones, since the failures are needed to assess the backtracks. A run in which no trajectory completes returns empty per-trajectory errors.
+        Adds a ``hybrid`` block of per-trajectory diagnostics with no AT-ROM counterpart, over every attempted trajectory rather than only the completed ones, since the failures are needed to assess the backtracks. A run in which no trajectory completes returns empty per-trajectory errors.
         """
         n = len(t_foms)
         args = [(i, np.asarray(tracers[i]), np.asarray(x_eqs[i]),
@@ -216,15 +216,15 @@ class HATROM:
 
         errs, diags = [None] * n, [None] * n
         if n_workers <= 1:
-            _hatrom_init(self)
+            _hybrid_init(self)
             for a in args:
-                i, e, d = _hatrom_solve_one(a)
+                i, e, d = _hybrid_solve_one(a)
                 errs[i], diags[i] = e, d
         else:
             with ProcessPoolExecutor(max_workers=n_workers,
-                                     initializer=_hatrom_init,
+                                     initializer=_hybrid_init,
                                      initargs=(self,)) as pool:
-                futures = {pool.submit(_hatrom_solve_one, a): a[0] for a in args}
+                futures = {pool.submit(_hybrid_solve_one, a): a[0] for a in args}
                 for done, fut in enumerate(as_completed(futures), 1):
                     i = futures[fut]
                     try:
@@ -242,22 +242,22 @@ class HATROM:
                   if diags[i] is None or diags[i].get("failure") is not None]
         out = {"n_tracers": n, "n_solved": n - len(failed), "n_valid": len(valid),
                "failed_idx": failed, "valid_idx": list(valid),
-               "hatrom_config": self.config, "per_tracer": {}}
+               "hybrid_config": self.config, "per_tracer": {}}
         for j, tag in enumerate(AGGREGATES):
             x = np.stack([errs[i][j] for i in valid])[:, list(qoi_indices)] if valid else np.empty((0, len(qoi_names)))
             out["per_tracer"][tag] = {name: x[:, k].copy() for k, name in enumerate(qoi_names)}
 
-        out["hatrom"] = {
+        out["hybrid"] = {
             k: np.array([(diags[i] or {}).get(k, np.nan) for i in range(n)],
-                        dtype=float) for k in HATROMResult.DIAG_KEYS}
+                        dtype=float) for k in HybridResult.DIAG_KEYS}
         return out
 
 
 @dataclass(frozen=True)
-class HATROMConfig:
-    """Settings of the hAT-ROM solve. Validated on construction.
+class HybridConfig:
+    """Settings of the hybrid solve. Validated on construction.
 
-    Backtracking is triggered when the relative projection error in the new cluster's basis exceeds ``sqrt(eta)``, with ``eta`` the residual SVD energy tolerance of the settings passed to :class:`HATROM`. The error is not checked on the interval that follows a FOM window. AT-ROM without backtracking is :meth:`ATROM.solve_tracer`, not a setting of this solve.
+    Backtracking is triggered when the relative projection error in the new cluster's basis exceeds ``sqrt(eta)``, with ``eta`` the residual SVD energy tolerance of the settings passed to :class:`Hybrid`. The error is not checked on the interval that follows a FOM window. AT-ROM without backtracking is :meth:`ATROM.solve_tracer`, not a setting of this solve.
 
     ``force_fom`` solves every interval with the FOM, the reference path for validating the FOM window solver.
 
@@ -277,7 +277,7 @@ class HATROMConfig:
                 raise ValueError(f"{name} must be > 0; got {getattr(self, name)!r}")
 
     def summary(self):
-        return (f"HATROMConfig(positivity={self.positivity}, "
+        return (f"HybridConfig(positivity={self.positivity}, "
                 f"force_fom={self.force_fom}, fom_atol={self.fom_atol:g}, "
                 f"fom_rtol={self.fom_rtol:g}, "
                 f"fom_min_scale={self.fom_min_scale:g}, "
@@ -285,8 +285,8 @@ class HATROMConfig:
 
 
 @dataclass
-class HATROMResult:
-    """One hAT-ROM solution and a record of how it was solved.
+class HybridResult:
+    """One hybrid solution and a record of how it was solved.
 
     ``t``/``y`` are concatenated with shared interval boundaries de-duplicated, so the columns stay aligned with the FOM reference's. ``path`` (the cluster of each interval, :data:`FOM_INTERVAL` for a FOM one) and ``fom_step`` (whether each interval was solved with the FOM) are indexed by interval. ``trigger_step`` and ``trigger_proj_error`` are the interval at which each backtrack was triggered and the projection error that triggered it.
     """
@@ -302,7 +302,7 @@ class HATROMResult:
     n_pos_endpoint: int          # intervals whose leaving state got the non-negativity correction
     n_steps: int
     dt_hydro: float
-    config: HATROMConfig
+    config: HybridConfig
     failure: Optional[str] = None
     # An interval count is not a cost: per-interval expense differs between FOM and AT-ROM, and n_rom_attempted exceeds n_rom_solves by the AT-ROM solves a backtrack discarded.
     n_fom_solves: int = 0
@@ -379,7 +379,7 @@ class HATROMResult:
 
 @dataclass
 class RomResult:
-    """An AT-ROM solution without backtracking, shaped to compare against :class:`HATROMResult`."""
+    """An AT-ROM solution without backtracking, shaped to compare against :class:`HybridResult`."""
 
     t: np.ndarray
     y: np.ndarray
@@ -392,7 +392,7 @@ class RomResult:
 
 
 class FOM:
-    """The FOM solve over a FOM window, which hAT-ROM backtracks to, for one network.
+    """The FOM solve over a FOM window, which hybrid backtracks to, for one network.
 
     For astrochemistry each interval is solved as KIDApy's solve with p_k held constant on each interval generated those datasets: in the coordinates ``z = x / max(x_entry, min_scale)``, rescaled at every interval boundary. For EGFR the window is solved as the EGFR datasets were generated: one solve over the whole window, without rescaling, at ``FOM_RTOL`` and ``FOM_ATOL`` of :mod:`src.fom.egfr`, since the operators are constant along a trajectory. The exact Jacobian is passed as a dense array.
 
@@ -485,7 +485,7 @@ class FOM:
 
 
 class _Intervals:
-    """Per-interval accumulator for a hAT-ROM solution.
+    """Per-interval accumulator for a hybrid solution.
 
     Every list is indexed by interval, ``t``/``y`` included -- one block per interval even when a FOM solve spans many, or :meth:`truncate` would cut in the wrong place. ``x_entry[k]`` is the state entering interval ``k``, so it holds one more element than the rest.
     """
@@ -645,7 +645,7 @@ def _quadratic_jacobian(A, B):
 def _error_series(t, y, t_fom, y_fom):
     """Per-species ``(max-in-time, l2-in-time)`` relative errors, in the order of ``AGGREGATES``.
 
-    Same reductions, floor and re-interpolation as ``run.Experiment.score``, so hAT-ROM numbers are comparable with the sweep CSVs.
+    Same reductions, floor and re-interpolation as ``run.Experiment.score``, so hybrid numbers are comparable with the sweep CSVs.
     """
     t, y = np.asarray(t, dtype=float), np.asarray(y, dtype=float)
     t_fom, y_fom = np.asarray(t_fom, dtype=float), np.asarray(y_fom, dtype=float)

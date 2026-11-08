@@ -33,7 +33,7 @@ PARAM_NAMES = ["p"]          # p = EGF(0), constant along a trajectory
 N_PARAMS = len(PARAM_NAMES)
 SPECIES_COL0 = N_LEADING + N_PARAMS   # first state column of a source row
 PARAM_SPECIES = "EGF"
-FOM_RTOL = 1e-8                        # FOM BDF tolerances of the dataset, also used by the FOM intervals of hAT-ROM
+FOM_RTOL = 1e-8                        # FOM BDF tolerances of the dataset, also used by the FOM intervals of hybrid
 FOM_ATOL = 1e-12
 X_FLOOR = 1e-30
 

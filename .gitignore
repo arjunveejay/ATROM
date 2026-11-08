@@ -5,6 +5,8 @@ experiments/**
 !experiments/**/run.slurm
 !experiments/**/timing.py
 !experiments/**/figures/*
+!experiments/**/*.csv
+!experiments/**/sweep/atrom_tol0.01_eta1e-5.npz
 .ipynb_checkpoints/
 datasets/
 logs/

@@ -27,7 +27,10 @@ data redistributed here for convenience, not covered by the licence above:
   networks/nelson/            Nelson & Langer (1999), ApJ 524, 923
   networks/osu_09_2008/       OSU gas-phase network, 2008 September release
   networks/lee1996_shielding.dat
-                              Lee, Herbst, Millar, Roueff & Pineau des Forets
+                              Lee, Herbst, Pineau des Forets, Roueff & Le Bourlot
                               (1996), A&A 311, 690
+  networks/odebase_1452/      ODEbase entry 1452 (https://www.odebase.org),
+                              from BioModels BIOMD0000000205 (CC0); Ung et al.
+                              (2008), FEBS Lett. 582, 2283
 
 Check each source's own terms before redistributing.
