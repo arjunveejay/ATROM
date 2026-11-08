@@ -1,0 +1,13 @@
+experiments/**
+!experiments/**/
+!experiments/**/*.ipynb
+!experiments/**/run.py
+!experiments/**/run.slurm
+!experiments/**/timing.py
+!experiments/**/figures/*
+.ipynb_checkpoints/
+datasets/
+logs/
+src/__pycache__
+*.pyc
+tmp
