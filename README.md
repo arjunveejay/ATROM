@@ -48,12 +48,11 @@ experiments/
 
 **Lorenz-96 and EGFR.** The datasets are generated on the first run, into `datasets/lorenz96/N100_F0-2.5` and `datasets/egfr/T1000`, by `src/fom/lorenz96.py` and `src/fom/egfr.py`.
 
-**Nelson and OSU.** The datasets are computed with [KIDApy](https://github.com/NSF-Simons-CosmicAI-Institute/KIDApy), along parameter trajectories obtained from a hydrodynamic simulation of a gravitational core collapse. They are not included in this repository; download them from
+**Nelson and OSU.** The datasets are computed with [KIDApy](https://github.com/NSF-Simons-CosmicAI-Institute/KIDApy), along parameter trajectories obtained from a hydrodynamic simulation of a gravitational core collapse. They are not included in this repository; download them from [huggingface.co/datasets/arjunveejay/atrom-data](https://huggingface.co/datasets/arjunveejay/atrom-data) (folder `grav_collapse/`).
 
-- Nelson: [doi:TODO](https://doi.org/TODO)
-- OSU: [doi:TODO](https://doi.org/TODO)
+Data credit: Arjun Vijaywargiya, Luke Smith, Stella Offner, and CosmicAI.
 
-and place them as
+Place them as
 
 ```text
 datasets/grav_collapse/nelson/params.npz
@@ -123,4 +122,8 @@ python experiments/nelson/R0.1_M6.0/timing.py
 ```
 
 It needs the AT-ROM at `tau_split = 0.01`, `eta = 1e-5`, which the run saves, and writes `timing_test.csv`. Run it on an otherwise idle node.
+
+## Acknowledgments
+
+This work was supported by the National Science Foundation under Cooperative Agreement 2421782 and the Simons Foundation award MPS-AI-00010515 (NSF-Simons AI Institute for Cosmic Origins—CosmicAI, https://www.cosmicai.org/).
 
