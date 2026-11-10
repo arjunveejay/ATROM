@@ -50,8 +50,6 @@ experiments/
 
 **Nelson and OSU.** The datasets are computed with [KIDApy](https://github.com/NSF-Simons-CosmicAI-Institute/KIDApy), along parameter trajectories obtained from a hydrodynamic simulation of a gravitational core collapse. They are not included in this repository; download them from [huggingface.co/datasets/arjunveejay/atrom-data](https://huggingface.co/datasets/arjunveejay/atrom-data) (folder `grav_collapse/`).
 
-Data credit: Arjun Vijaywargiya, Luke Smith, Stella Offner, and CosmicAI.
-
 Place them as
 
 ```text
@@ -60,6 +58,8 @@ datasets/grav_collapse/nelson/trajectories.npy
 datasets/grav_collapse/osu_09_2008/params.npz
 datasets/grav_collapse/osu_09_2008/trajectories.npy
 ```
+
+**Data credit:** Arjun Vijaywargiya, Luke Smith, Stella Offner, and CosmicAI.
 
 Each dataset folder holds two files:
 
